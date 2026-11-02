@@ -1,0 +1,295 @@
+<!doctype html>
+<html lang="en" class="dark">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Feel Piano</title>
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='6' fill='%23141020'/%3E%3Crect x='7' y='9' width='5' height='16' rx='1' fill='%23c9a2ff'/%3E%3Crect x='14' y='9' width='5' height='16' rx='1' fill='%23ffb36b'/%3E%3Crect x='21' y='9' width='5' height='16' rx='1' fill='%239b8cc4'/%3E%3C/svg%3E" />
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      darkMode: 'class',
+      theme: {
+        extend: {
+          colors: {
+            ink: '#0b0910',
+            panel: '#141020',
+            panel2: '#1c1730',
+            line: '#2b2444',
+            accent: '#c9a2ff',
+            accent2: '#ffb36b',
+          },
+        },
+      },
+      plugins: [],
+    };
+  </script>
+  <style type="text/tailwindcss">
+    @layer components {
+      .card { @apply rounded-2xl border border-line bg-panel p-4; }
+      .card-title { @apply text-xs font-semibold uppercase tracking-wider text-accent/70; }
+      .label { @apply mb-1 block text-[11px] uppercase tracking-wide text-slate-400/80; }
+      .select { @apply w-full rounded-lg border border-line bg-panel2 px-2 py-1.5 text-sm text-slate-200; }
+      .btn { @apply rounded-lg bg-gradient-to-br from-violet-400 to-accent px-4 py-2 text-sm font-semibold text-[#120d1f] hover:brightness-110 transition; }
+      .btn-ghost { @apply rounded-lg border border-line bg-panel2 px-4 py-2 text-sm text-slate-300 hover:border-line/70 hover:border-violet-700 transition; }
+      .tab-btn { @apply rounded-md px-3 py-1.5 text-slate-400 hover:text-white transition; }
+      .tab-btn-active { @apply bg-panel2 text-white; }
+      .voice-btn { @apply rounded-lg border border-line bg-panel2 py-2 text-sm text-slate-300 transition; }
+      .voice-btn-active { @apply border-accent bg-accent/10 text-white; }
+      .level-chip { @apply flex w-full items-center justify-between gap-2 rounded-lg border border-line bg-panel px-3 py-2 text-left text-sm text-slate-300 hover:border-violet-700 transition; }
+      .level-chip-active { @apply border-accent bg-accent/10 text-white; }
+      .chord-chip { @apply min-w-[84px] rounded-lg border border-line bg-panel2 px-3 py-2 text-left transition; }
+      .chord-chip-active { @apply border-accent2 bg-accent2/10; }
+      /* --- piano --- */
+      .piano { position: relative; display: flex; width: 100%; height: 100%; user-select: none; touch-action: none; }
+      .key { user-select: none; transition: background 60ms linear; }
+      /* white keys sit in normal flow and share the width equally */
+      .key-white { position: relative; flex: 1 1 0; min-width: 0; display: flex; align-items: flex-end; justify-content: center; border-radius: 0 0 5px 5px; border: 1px solid #0b0910; padding-bottom: 3px; font-size: 9px; line-height: 1; color: #6b6385; background: linear-gradient(#f7f5ff, #d9d3ec); }
+      .key-white-held { background: linear-gradient(#a78bfa, #8b5cf6) !important; color: #fff !important; }
+      /* only black keys are absolutely placed, between their white neighbours */
+      .key-black { position: absolute; top: 0; height: 62%; border-radius: 0 0 4px 4px; border: 1px solid #05030a; z-index: 2; background: linear-gradient(#2a2340, #0e0a18); }
+      .key-black-held { background: linear-gradient(#c9a2ff, #8b5cf6) !important; }
+      .key-hint { outline: 2px solid #ffb36b; outline-offset: -2px; }
+      .piano-compact .key-white { padding-bottom: 1px; font-size: 7px; }
+      .bar { @apply min-w-[2px] flex-1 rounded-t-sm bg-violet-400; }
+    }
+  </style>
+</head>
+<body class="min-h-screen bg-ink font-sans text-slate-200">
+  <header class="sticky top-0 z-30 border-b border-line bg-ink/90 backdrop-blur">
+    <div class="mx-auto flex max-w-7xl flex-wrap items-center gap-3 px-4 py-3">
+      <div class="mr-2 flex items-center gap-2">
+        <div class="h-7 w-7 rounded-md bg-gradient-to-br from-accent to-accent2"></div>
+        <span class="font-semibold tracking-tight text-white">Feel Piano</span>
+      </div>
+      <nav id="tabs" class="flex flex-wrap gap-1 rounded-lg bg-panel p-1 text-sm">
+        <button data-tab="play" class="tab-btn">Play</button>
+        <button data-tab="roll" class="tab-btn">Piano Roll</button>
+        <button data-tab="prog" class="tab-btn">Progressions</button>
+      </nav>
+      <div class="ml-auto flex items-center gap-2">
+        <span data-pedal class="inline-flex h-9 w-[74px] items-center justify-center rounded-lg border border-line bg-panel2 text-xs text-slate-500 transition-colors" title="Sustain pedal state (MIDI CC64)">
+          Pedal
+        </span>
+        <button id="midi-btn" class="inline-flex h-9 w-[104px] items-center justify-center gap-1 rounded-lg border border-line bg-panel2 text-xs text-slate-300 transition hover:border-violet-700" title="Connect a MIDI keyboard">
+          <span>MIDI</span><span id="midi-status" class="font-semibold text-yellow-300">off</span>
+        </button>
+        <select id="midi-input" class="hidden h-9 max-w-56 rounded-lg border border-line bg-panel2 px-2 text-xs text-slate-200"></select>
+      </div>
+    </div>
+  </header>
+
+  <main class="mx-auto max-w-7xl px-4 pb-32 pt-4">
+
+    <!-- ============ PLAY ============ -->
+    <section id="panel-play" class="tab-panel">
+      <div class="grid gap-4 lg:grid-cols-[280px_1fr]">
+        <aside class="space-y-4">
+          <div class="card">
+            <h2 class="card-title">Sound</h2>
+            <p id="voice-status" class="mt-2 text-xs text-slate-400">Grand piano - samples load on the first key press.</p>
+          </div>
+
+          <div class="card">
+            <h2 class="card-title">Your keyboards</h2>
+            <label class="label mt-2" for="keyboard-select">Profile</label>
+            <select id="keyboard-select" class="select"></select>
+            <p id="keyboard-note" class="mt-2 text-xs leading-relaxed text-slate-400"></p>
+            <label class="label mt-3" for="curve-select">Velocity curve</label>
+            <select id="curve-select" class="select"></select>
+            <p class="mt-1 text-[11px] text-slate-500">Shapes how your key speed becomes velocity. <em>Soft</em> makes light playing louder - useful if the PSR feels stiff.</p>
+            <label class="label mt-3 flex items-center justify-between" for="audio-sens">
+              <span>Audio-input sensitivity</span>
+            </label>
+            <input id="audio-sens" type="range" min="0" max="100" value="55" class="w-full accent-accent" />
+            <p class="mt-1 text-[11px] text-slate-500">Only used for the PSR over line-in/mic, when no MIDI notes arrive.</p>
+            <button id="audio-btn" class="btn-ghost mt-3 w-full">Enable audio input</button>
+          </div>
+
+        </aside>
+
+        <div class="space-y-4">
+          <div class="card">
+            <div class="flex flex-wrap items-center gap-3">
+              <h2 class="card-title">Free play</h2>
+              <span class="text-xs text-slate-500" id="play-hint">Click the keys or connect a keyboard. Velocity = how hard you press.</span>
+            </div>
+            <div id="keyboard-play" class="relative mt-3 h-40 w-full"></div>
+            <p class="mt-2 text-xs text-slate-500">Computer keys: <kbd>A</kbd>-<kbd>'</kbd> play white notes, the row above plays blacks. <kbd>Z</kbd>/<kbd>X</kbd> shift octave, <kbd>Shift</kbd> + key = hard hit.</p>
+          </div>
+
+          <div class="card">
+            <h2 class="card-title">Hear the difference</h2>
+            <p class="mt-1 text-sm text-slate-400">The same phrase, three ways. The first is how a flat, on-off keyboard sounds.</p>
+            <div class="mt-3 flex flex-wrap gap-2">
+              <button class="btn-ghost" data-demo="flat">Flat / no feelings</button>
+              <button class="btn-ghost" data-demo="even">Medium, even</button>
+              <button class="btn" data-demo="expressive">With phrasing</button>
+            </div>
+            <div id="demo-velocity" class="mt-3 flex h-10 items-end gap-[3px]"></div>
+          </div>
+
+          <div class="card">
+            <h2 class="card-title">Analyser</h2>
+            <dl class="mt-2 grid grid-cols-2 gap-y-1 text-xs text-slate-400">
+              <dt>Last velocity</dt><dd id="a-last" class="text-right text-white">-</dd>
+              <dt>Range</dt><dd id="a-range" class="text-right text-white">-</dd>
+              <dt>Ghost touches</dt><dd id="a-ghost" class="text-right text-white">0</dd>
+              <dt>Consistency</dt><dd id="a-consistency" class="text-right text-white">-</dd>
+            </dl>
+            <div class="mt-3 flex h-24 items-end gap-[3px]" id="velocity-strip"></div>
+            <p id="analyser-verdict" class="mt-2 text-xs text-slate-500">Play a few notes to analyse your touch.</p>
+            <button id="reset-analysis" class="btn-ghost mt-3 w-full">Reset analysis</button>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ============ TOUCH ============ -->
+    <!-- ============ PIANO ROLL ============ -->
+    <section id="panel-roll" class="tab-panel hidden">
+      <div class="grid gap-4 lg:grid-cols-[240px_1fr]">
+        <aside class="space-y-4">
+          <div class="card">
+            <h2 class="card-title">Your playing</h2>
+            <p class="mt-1 text-xs text-slate-400">
+              Everything you play is drawn here. No targets, no scores - just your own dynamics made visible.
+            </p>
+            <div class="mt-3 flex gap-2">
+              <button id="roll-clear" class="btn-ghost flex-1">Clear</button>
+              <button id="roll-pause" class="btn-ghost flex-1">Freeze</button>
+            </div>
+          </div>
+
+          <div class="card">
+            <h2 class="card-title">Colour key</h2>
+            <p class="mt-1 mb-2 text-[11px] text-slate-500">Brightness = how hard you pressed.</p>
+            <div id="roll-legend" class="space-y-1.5"></div>
+          </div>
+
+          <div class="card">
+            <h2 class="card-title">This session</h2>
+            <dl class="mt-2 grid grid-cols-2 gap-y-1 text-xs text-slate-400">
+              <dt>Notes</dt><dd id="roll-count" class="text-right text-white">0</dd>
+              <dt>Softest</dt><dd id="roll-min" class="text-right text-white">-</dd>
+              <dt>Hardest</dt><dd id="roll-max" class="text-right text-white">-</dd>
+              <dt>Spread</dt><dd id="roll-span" class="text-right text-white">-</dd>
+              <dt>Ghosts</dt><dd id="roll-ghosts" class="text-right text-white">0</dd>
+            </dl>
+            <p id="roll-verdict" class="mt-2 text-xs text-slate-500">Play a phrase and the analysis appears.</p>
+          </div>
+        </aside>
+
+        <div class="space-y-4">
+          <div class="card">
+            <div class="flex flex-wrap items-baseline justify-between gap-2">
+              <h2 class="card-title">Piano roll</h2>
+              <span class="text-[11px] text-slate-500">newest notes appear on the right and scroll left</span>
+            </div>
+            <canvas id="roll-canvas" class="mt-2 h-[420px] w-full rounded-lg border border-line bg-[#0f0b1a]"></canvas>
+          </div>
+
+          <div class="grid gap-4 md:grid-cols-2">
+            <div class="card">
+              <h3 class="card-title">What to look for</h3>
+              <ul class="mt-2 list-disc space-y-2 pl-4 text-sm text-slate-300">
+                <li>If every bar is the same colour, you are playing flat - that is the "no feelings" sound, visible.</li>
+                <li>Long bright bars with short dim ones between them = an accent, exactly what a phrase needs.</li>
+                <li>Bars that barely show up are ghost touches: the key did not reach the bottom.</li>
+                <li>A row of bars rising in brightness is a crescendo. Falling is a diminuendo.</li>
+              </ul>
+            </div>
+            <div class="card">
+              <h3 class="card-title">Try this</h3>
+              <ol class="mt-2 list-decimal space-y-2 pl-4 text-sm text-slate-300">
+                <li>Play one note 10 times, each time a little louder. Watch the colour climb.</li>
+                <li>Play a chord soft, then the same chord hard. Notice which notes are brighter.</li>
+                <li>Play a melody you know and try to shape the last note down to a whisper.</li>
+                <li>Press Freeze to hold the picture and study it, then Clear to start again.</li>
+              </ol>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ============ PROGRESSIONS ============ -->
+    <section id="panel-prog" class="tab-panel hidden">
+      <div class="grid gap-4 lg:grid-cols-[300px_1fr]">
+        <aside class="space-y-4">
+          <div class="card">
+            <h2 class="card-title">Progression</h2>
+            <select id="prog-select" class="select mt-2"></select>
+            <label class="label mt-3" for="root-select">Key</label>
+            <select id="root-select" class="select"></select>
+            <div id="prog-info" class="mt-3 space-y-2 text-sm text-slate-300"></div>
+          </div>
+          <div class="card">
+            <h2 class="card-title">Theory, plainly</h2>
+            <p class="mt-1 text-xs leading-relaxed text-slate-400">
+              Roman numerals (I, vi, IV...) number the chords of a key. In C major:
+              <span class="text-white">I = C</span>, <span class="text-white">ii = Dm</span>, <span class="text-white">iii = Em</span>,
+              <span class="text-white">IV = F</span>, <span class="text-white">V = G</span>, <span class="text-white">vi = Am</span>.
+              Upper-case is major, lower-case is minor. That is why the same numbers work in every key.
+            </p>
+          </div>
+        </aside>
+
+        <div class="space-y-4">
+          <div class="card">
+            <div class="flex flex-wrap items-center gap-2">
+              <h2 id="prog-title" class="card-title">-</h2>
+              <div class="ml-auto flex flex-wrap gap-2">
+                <button id="prog-play" class="btn">Play it back</button>
+                <button id="prog-metronome" class="btn-ghost">Metronome: off</button>
+              </div>
+            </div>
+            <div id="prog-chords" class="mt-3 flex flex-wrap gap-2"></div>
+            <div id="prog-diagram" class="mt-4 grid grid-cols-2 gap-3 md:grid-cols-3"></div>
+            <div id="prog-tip" class="mt-3 rounded-lg border border-accent2/30 bg-accent2/5 p-3 text-sm text-accent2/90"></div>
+          </div>
+
+          <div class="card">
+            <div class="flex flex-wrap items-baseline justify-between gap-2">
+              <h2 class="card-title">Your chord playing</h2>
+              <span class="text-[11px] text-slate-500">same roll as the Piano Roll tab - watch the chord shape stack up</span>
+            </div>
+            <canvas id="prog-canvas" class="mt-2 h-[300px] w-full rounded-lg border border-line bg-[#0f0b1a]"></canvas>
+          </div>
+
+          <div class="grid gap-4 md:grid-cols-2">
+            <div class="card">
+              <h3 class="card-title">Practice loop</h3>
+              <p class="mt-1 text-sm text-slate-400">Pick a step, then play all of its notes together. The server grades what you played.</p>
+              <div class="mt-3 grid grid-cols-2 gap-2">
+                <button id="prog-loop" class="btn">Start loop</button>
+                <button id="prog-grade" class="btn-ghost">Grade my chord</button>
+              </div>
+              <div id="prog-result" class="mt-3 rounded-lg border border-line bg-panel2 p-3 text-sm text-slate-400">Nothing played yet.</div>
+            </div>
+            <div class="card">
+              <h3 class="card-title">Voice it better</h3>
+              <ul id="prog-voice-tips" class="mt-2 list-disc space-y-2 pl-4 text-sm text-slate-300"></ul>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <footer class="fixed inset-x-0 bottom-0 z-20 border-t border-line bg-panel/95 backdrop-blur">
+    <div class="mx-auto flex max-w-7xl items-stretch gap-3 px-4 py-2">
+      <span class="hidden w-16 shrink-0 items-center text-[11px] uppercase tracking-wide text-slate-500 sm:flex">Keyboard</span>
+      <div id="keyboard-dock" class="relative h-[76px] min-w-0 flex-1"></div>
+    </div>
+  </footer>
+
+  <script src="/static/js/audio.js"></script>
+  <script src="/static/js/midi.js"></script>
+  <script src="/static/js/keyboard-ui.js"></script>
+  <script src="/static/js/demos.js"></script>
+  <script src="/static/js/roll.js"></script>
+  <script src="/static/js/progressions.js"></script>
+  <script src="/static/js/app.js"></script>
+</body>
+</html>

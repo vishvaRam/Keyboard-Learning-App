@@ -1,0 +1,24 @@
+[project]
+name = "keyboard-learning-app"
+version = "0.1.0"
+description = "Feel Piano - touch sensitivity and chord progression trainer"
+requires-python = ">=3.12"
+dependencies = [
+    "fastapi",
+    "uvicorn[standard]",
+    "pydantic-settings",
+    "python-multipart",
+]
+
+[tool.ruff]
+line-length = 120
+target-version = "py312"
+# the project lives on an exFAT/NTFS mount that forces 0777 on every file
+exclude = [".venv"]
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B", "SIM"]
+ignore = ["EXE002"]
+
+[tool.ruff.format]
+quote-style = "double"

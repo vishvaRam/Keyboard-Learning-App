@@ -1,0 +1,19 @@
+services:
+  feel-piano:
+    build: .
+    image: feel-piano:latest
+    container_name: feel-piano
+    ports:
+      - "4567:4567"
+    environment:
+      APP_NAME: Feel Piano
+      HOST: 0.0.0.0
+      PORT: "4567"
+      DEBUG: "false"
+      # scoring thresholds - override here or in a .env file next to this compose file
+      TARGET_TOLERANCE_MS: "120"
+      WEAK_VELOCITY_MAX: "30"
+      STRONG_VELOCITY_MIN: "128"
+      DEFAULT_GHOST_FLOOR: "12"
+      ROLLING_WINDOW_SECONDS: "20"
+    restart: unless-stopped
